@@ -6,8 +6,8 @@
 #include <ArduinoJson.h>
 
 // WiFi Credentials
-const char* ssid = "Antonelli";
-const char* password = "maomao1206";
+const char* ssid = "yourSSID";
+const char* password = "yourPASSWORD";
 
 // CoinGecko API (EUR prices)
 const char* apiUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,cardano,algorand,solana,ripple&vs_currencies=eur";
