@@ -1,0 +1,102 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
+
+// WiFi Credentials
+const char* ssid = "yourSSID";
+const char* password = "yourPASSWORD";
+
+// CoinGecko API (EUR prices)
+const char* apiUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,cardano,algorand,solana,ripple&vs_currencies=eur";
+
+WiFiClientSecure wifiClient;
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // I2C LCD (16x2)
+
+void setup() {
+    Serial.begin(115200);
+    WiFi.begin(ssid, password);
+    Wire.begin(D2, D1);
+    lcd.begin(16, 2);
+    lcd.backlight();
+    lcd.print("Connecting WiFi...");
+
+    while (WiFi.status() != WL_CONNECTED) delay(1000);
+    lcd.clear();
+    lcd.print("WiFi Connected!");
+    wifiClient.setInsecure();  // Bypass SSL verification
+}
+
+void loop() {
+    if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        http.begin(wifiClient, apiUrl);
+        http.addHeader("User-Agent", "ESP8266");
+        
+        int httpCode = http.GET();
+        if (httpCode == HTTP_CODE_OK) {
+            String payload = http.getString();
+            Serial.println("API Response:");
+            Serial.println(payload);
+
+            // Extract and format prices (true 3-digit precision)
+            String btcPrice = formatPrice(payload, "bitcoin");
+            String ethPrice = formatPrice(payload, "ethereum");
+            String adaPrice = formatPrice(payload, "cardano");
+            String algoPrice = formatPrice(payload, "algorand");
+            String solPrice = formatPrice(payload, "solana");
+            String xrpPrice = formatPrice(payload, "ripple");
+
+            // Display on LCD
+            displayCrypto("BTC", btcPrice, "ETH", ethPrice);
+            displayCrypto("ADA", adaPrice, "ALGO", algoPrice);
+            displayCrypto("SOL", solPrice, "XRP", xrpPrice);
+        } else {
+            Serial.print("HTTP Error: ");
+            Serial.println(http.errorToString(httpCode));
+            lcd.clear();
+            lcd.print("HTTP Error!");
+        }
+        http.end();
+    } else {
+        lcd.clear();
+        lcd.print("WiFi Lost!");
+    }
+    delay(60000);  // Update every 60 sec
+}
+
+// Fix: Formats to 3 decimals WITHOUT trailing zeros
+String formatPrice(String payload, String crypto) {
+    DynamicJsonDocument doc(1024);
+    deserializeJson(doc, payload);
+
+    if (doc[crypto]["eur"]) {
+        double price = doc[crypto]["eur"].as<double>();
+        String raw = String(price, 6);               // Get full precision
+        int dotPos = raw.indexOf('.');               // Find decimal point
+        if (dotPos != -1) {
+            raw = raw.substring(0, dotPos + 4);      // Keep 3 decimals
+            // Trim trailing zeros (e.g., "2.500" → "2.5")
+            while (raw.endsWith("0")) {
+                raw.remove(raw.length() - 1);
+            }
+            if (raw.endsWith(".")) {                // Handle cases like "123."
+                raw.remove(raw.length() - 1);
+            }
+        }
+        return raw;
+    }
+    return "N/A";
+}
+
+// LCD display function
+void displayCrypto(String crypto1, String price1, String crypto2, String price2) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print(crypto1 + ": €" + price1);
+    lcd.setCursor(0, 1);
+    lcd.print(crypto2 + ": €" + price2);
+    delay(2000);  // 4 sec per screen
+}
